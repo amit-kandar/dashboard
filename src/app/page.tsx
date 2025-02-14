@@ -1,101 +1,218 @@
-import Image from "next/image";
+"use client";
+
+import { useState, useMemo } from "react";
+import { DropdownMenuCheckboxes } from "@/components/dropdown-menu-checkbox";
+import { ElectricityRangeByYear } from "@/components/electric-range-by-year";
+import { EVGrowthOverTime } from "@/components/ev-growth-over-time";
+import { EVsByManufacturer } from "@/components/evs-by-manufacturer";
+import { ModeToggle } from "@/components/mode-toggle";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { YearlyEVAdoptionRate } from "@/components/yearly-ev-adoption-rate";
+import { Award, BatteryCharging, Car, CarFront } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import CardSkeleton from "@/components/card-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+	getAverageRange,
+	getMostPopularModel,
+	getTopBrand,
+	getTotalEVs,
+} from "@/lib/functions";
+import { EVData } from "@/types/vehicles";
+
+// Function to fetch vehicles from the API
+const fetchVehicles = async (): Promise<{ data: EVData[] }> => {
+	const response = await fetch("/api/fetchCSV");
+	if (!response.ok) {
+		throw new Error("Failed to fetch vehicles");
+	}
+	return response.json();
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+	const {
+		data: vehicles,
+		isError,
+		error,
+		isLoading,
+	} = useQuery({
+		queryKey: ["vehicles"],
+		queryFn: fetchVehicles,
+		staleTime: 1000 * 60,
+		retry: 3,
+		refetchOnWindowFocus: false,
+	});
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+	// State to track selected filters
+	const [selectedFilters, setSelectedFilters] = useState({
+		County: [] as string[],
+		City: [] as string[],
+		"Model Year": [] as string[],
+	});
+
+	// Function to update filters when selection changes
+	const updateFilters = (
+		key: keyof typeof selectedFilters,
+		values: string[]
+	) => {
+		setSelectedFilters((prev) => ({
+			...prev,
+			[key]: values,
+		}));
+	};
+
+	// Filter the data based on selected values
+	const filteredData = useMemo(() => {
+		if (!vehicles?.data) return [];
+		return vehicles.data.filter((vehicle) => {
+			const matchesCounty =
+				selectedFilters.County.length === 0 ||
+				selectedFilters.County.includes(vehicle.County);
+			const matchesCity =
+				selectedFilters.City.length === 0 ||
+				selectedFilters.City.includes(vehicle.City);
+			const matchesModelYear =
+				selectedFilters["Model Year"].length === 0 ||
+				selectedFilters["Model Year"].includes(vehicle["Model Year"]);
+			return matchesCounty && matchesCity && matchesModelYear;
+		});
+	}, [vehicles, selectedFilters]);
+
+	if (isError || !vehicles) {
+		return (
+			<div className="p-4">
+				<p className="text-red-600 font-medium">
+					Error: {error?.message || "An unknown error occurred"}
+				</p>
+			</div>
+		);
+	}
+
+	if (isLoading) {
+		return (
+			<div className="grid gap-4 p-4 pt-0">
+				<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+					{Array(4)
+						.fill(null)
+						.map((_, i) => (
+							<CardSkeleton key={i} />
+						))}
+				</div>
+				<div className="grid gap-4 md:grid-cols-2">
+					<Skeleton className="h-64 w-full rounded-md" />
+					<Skeleton className="h-64 w-full rounded-md" />
+				</div>
+				<div className="grid gap-4 md:grid-cols-2">
+					<Skeleton className="h-64 w-full rounded-md" />
+					<Skeleton className="h-64 w-full rounded-md" />
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex-1 space-y-4 p-8 pt-6">
+			<div className="flex items-center justify-between space-y-2">
+				<h2 className="text-3xl font-bold tracking-tight">MapUp</h2>
+				<div className="flex items-center space-x-2">
+					<DropdownMenuCheckboxes
+						title="County"
+						vehicles={vehicles.data}
+						selectedValues={selectedFilters.County}
+						setSelectedValues={(values) =>
+							updateFilters("County", values)
+						}
+					/>
+					<DropdownMenuCheckboxes
+						title="City"
+						vehicles={vehicles.data}
+						selectedValues={selectedFilters.City}
+						setSelectedValues={(values) =>
+							updateFilters("City", values)
+						}
+					/>
+					<DropdownMenuCheckboxes
+						title="Model Year"
+						vehicles={vehicles.data}
+						selectedValues={selectedFilters["Model Year"]}
+						setSelectedValues={(values) =>
+							updateFilters("Model Year", values)
+						}
+					/>
+					<ModeToggle />
+				</div>
+			</div>
+			<Tabs defaultValue="overview" className="space-y-4">
+				<TabsContent value="overview" className="space-y-4">
+					<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+						<Card>
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">
+									Total EVs
+								</CardTitle>
+								<Car />
+							</CardHeader>
+							<CardContent>
+								<div className="text-2xl font-bold">
+									{getTotalEVs(filteredData)}
+								</div>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">
+									Top Brand
+								</CardTitle>
+								<Award />
+							</CardHeader>
+							<CardContent>
+								<div className="text-2xl font-bold">
+									{getTopBrand(filteredData)}
+								</div>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">
+									Avg Range
+								</CardTitle>
+								<BatteryCharging />
+							</CardHeader>
+							<CardContent>
+								<div className="text-2xl font-bold">
+									{getAverageRange(filteredData)} Km
+								</div>
+							</CardContent>
+						</Card>
+						<Card>
+							<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+								<CardTitle className="text-sm font-medium">
+									Most Popular Model
+								</CardTitle>
+								<CarFront />
+							</CardHeader>
+							<CardContent>
+								<div className="text-2xl font-bold">
+									{getMostPopularModel(filteredData)}
+								</div>
+							</CardContent>
+						</Card>
+					</div>
+					<div className="grid gap-4">
+						<div className="grid gap-4 grid-cols-2">
+							<EVsByManufacturer
+								vehicles={{ data: filteredData }}
+							/>
+							<YearlyEVAdoptionRate vehicles={filteredData} />
+						</div>
+						<div className="grid gap-4 grid-cols-2">
+							<EVGrowthOverTime vehicles={filteredData} />
+							<ElectricityRangeByYear vehicles={filteredData} />
+						</div>
+					</div>
+				</TabsContent>
+			</Tabs>
+		</div>
+	);
 }
